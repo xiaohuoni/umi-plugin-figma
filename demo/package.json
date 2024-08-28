@@ -1,0 +1,16 @@
+{
+  "name": "demo",
+  "version": "1.0.0",
+  "description": "",
+  "keywords": [],
+  "license": "ISC",
+  "author": "",
+  "main": "index.js",
+  "scripts": {
+    "build": "umi build",
+    "dev": "umi dev"
+  },
+  "dependencies": {
+    "umi": "^4.3.17"
+  }
+}

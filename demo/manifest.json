@@ -1,0 +1,14 @@
+{
+  "name": "umi-plugin",
+  "id": "1237",
+  "api": "1.0.0",
+  "main": "./code.js",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": ["figma", "figjam"],
+  "ui": "./index.html",
+  "networkAccess": {
+    "allowedDomains": ["none"]
+  }
+}
