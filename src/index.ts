@@ -1,8 +1,7 @@
 import { AlitaApi } from '@alita/types';
 import { fsExtra, logger, winPath } from '@umijs/utils';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync } from 'fs';
 import { join } from 'path';
-
 interface FigmaManiFest {
   name?: string;
   id?: string;
@@ -48,10 +47,16 @@ export default function (api: AlitaApi) {
   // manifest.json 由根目录文件和配置合并
   const figmaManifest = { ...manifestJson, ...figma };
   api.modifyConfig((memo: any) => {
+    memo.hash = false;
+    memo.jsMinifier = 'none';
+    // This is necessary because Figma's 'eval' works differently than normal eval
+    memo.devtool =
+      process.env.NODE_ENV === 'development' ? 'inline-source-map' : false;
+    memo.mfsu = false;
     memo.mpa = {
-      getConfigFromEntryFile: true,
+      getConfigFromEntryFile: false,
       entry: {
-        index: { },
+        index: {},
       },
     };
     return memo;
@@ -63,56 +68,47 @@ export default function (api: AlitaApi) {
     }
     return memo;
   });
-  const supportFigma = ()=>{
-      figmaManifest.main = 'code.js';
-      figmaManifest.ui = 'index.html';
-      const outputFile = winPath(
-        join(api.paths.absOutputPath, manifestFileName),
-      );
-      fsExtra.writeJSONSync(outputFile, figmaManifest);
-      // inject scripts
-      const htmlPath = winPath(join(api.paths.absOutputPath, 'index.html'));
-      if (existsSync(htmlPath)) {
-        let html = readFileSync(htmlPath, 'utf-8').toString();
-        const scriptTags =
-          html.match(/<script\s+defer\s+src="([^"]+)"><\/script>/g) || [];
-        for (let index = 0; index < scriptTags.length; index++) {
-          const tag = scriptTags[index];
-          const src = tag.match(/src="([^"]+)"/)?.[1] || 'index.js';
-          const jsPath = winPath(join(api.paths.absOutputPath, src));
-          const jsStr = readFileSync(jsPath, 'utf-8').toString();
-          // c.replace(Je, "$&/")  ??
-          // const str = 'c.replace(Je, "$&/")';
-          // const aa = `abcdeffdasdas`.replace('ffd', `asd${str}da`);
-          // console.log(aa)
-          // 期望 abcdec.replace(Je, "$&/")asdas
-          // 结果 abcdeasdc.replace(Je, "ffd/")daasdas
-          // html = html.replace(tag, '<script type="module">'+jsStr+'</script>');
-          const [f, ...other] = html.split(tag);
-          html = [
-            f,
-            '<script type="module">',
-            jsStr,
-            '</script>',
-            ...other,
-          ].join('');
-        }
 
-        writeFileSync(htmlPath, html, 'utf-8');
-        logger.info(
-          '构建完成，请从 Figma - Plugins - Development - Import plugin from manifest... 选择 dist/manifest.json',
-        );
-      } else {
-        logger.error(
-          '构建失败，未生成 index.html, 需要页面入口文件 pages/index/index.tsx',
-        );
-        return;
-      }
-  }
+  api.chainWebpack((memo) => {
+    memo.plugins.delete('hmr');
+    (api.appData.mpa!.entry as any[]).forEach((entry) => {
+      memo.plugin(`html-${entry.name}`).use(require('html-webpack-plugin'), [
+        {
+          filename: `${entry.name}.html`,
+          minify: false,
+          template: join(api.paths.absTmpPath, 'mpa/template.html'),
+          inlineSource: '.(js|css)$',
+          templateParameters: entry,
+          scriptLoading: 'module',
+          chunks: [entry.name],
+        },
+      ]);
+    });
+    memo
+      .plugin('inline-source')
+      .use(require('html-inline-script-webpack-plugin'), [
+        {
+          htmlMatchPattern: [/index.html/],
+          scriptMatchPattern: [/.js$/],
+        },
+      ]);
+    return memo;
+  });
 
-  api.onBuildComplete(async ({ err, stats }) => {
-    if (!err) {
-      supportFigma();
-    }
+  const supportFigma = () => {
+    figmaManifest.main = 'code.js';
+    figmaManifest.ui = 'index.html';
+    const outputFile = winPath(join(api.paths.absOutputPath, manifestFileName));
+    fsExtra.writeJSONSync(outputFile, figmaManifest);
+    logger.info(
+      '构建完成，请从 Figma - Plugins - Development - Import plugin from manifest... 选择 dist/manifest.json',
+    );
+  };
+
+  api.onDevCompileDone(async ({ stats }) => {
+    supportFigma();
+  });
+  api.onBuildComplete(async ({ stats }) => {
+    supportFigma();
   });
 }

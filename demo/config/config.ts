@@ -1,8 +1,7 @@
 import { defineConfig } from 'umi';
 
 export default defineConfig({
-    plugins:['../dist/index'],
-    figma:{},
-    hash: false,
-    writeToDisk:true
-})
+  plugins: ['../dist/index'],
+  figma: {},
+  writeToDisk: true,
+});
